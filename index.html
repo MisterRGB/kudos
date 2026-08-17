@@ -132,23 +132,30 @@
        Why: Controls user login sessions via Supabase passwordless Magic Links.
        ------------------------------------------------------------------------- */
     async function handleMagicLinkLogin(event) {
-      event.preventDefault();
-      const email = document.getElementById('student-email').value;
+  event.preventDefault();
+  const email = document.getElementById('student-email').value;
 
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          // GitHub Pages redirect target after clicking the emailed link
-          emailRedirectTo: window.location.href
-        }
-      });
+  const { error } = await supabase.auth.signInWithOtp({
+    email: email,
+    options: {
+      // Explicitly state your GitHub Pages URL here
+      emailRedirectTo: 'https://misterrgb.github.io/kudos/'
+    }
+  });
+
+  if (error) {
+    alert('Error logging in: ' + error.message);
+  } else {
+    alert('Check your inbox! We sent you a magic login link.');
+  }
+}
 
       if (error) {
         alert('Error logging in: ' + error.message);
       } else {
         alert('Check your inbox! We sent you a magic login link.');
       }
-    }
+    
 
     async function handleLogout() {
       await supabase.auth.signOut();
