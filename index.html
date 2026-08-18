@@ -132,17 +132,43 @@
       }
     }
 
+// ==========================================
+    // SECTION 4: SMART AUTHENTICATION GUARD & ROUTER
     // ==========================================
-    // SECTION 4: AUTHENTICATION GUARD
-    // ==========================================
+    // List of moderator emails that should be sent directly to the moderation dashboard
+    const AUTHORIZED_MODERATORS = [
+      'mihsterbee@gmail.com',
+      '2023bermol@npghs.school.nz',
+      'nbouterey@npghs.school.nz'
+    ];
+
     /**
      * Listens for authentication changes automatically.
-     * If the student is ALREADY logged in (or just returned from clicking their email link),
-     * automatically redirect them past this login screen straight to submit.html.
+     * Directs moderators to moderate.html and students to submit.html.
      */
     supabaseClient.auth.onAuthStateChange((event, session) => {
       if (session) {
-        window.location.href = 'submit.html';
+        const userEmail = session.user.email.toLowerCase();
+
+        // Check if the logged-in email is in our moderator list
+        if (AUTHORIZED_MODERATORS.includes(userEmail)) {
+          window.location.href = 'moderate.html';
+        } else {
+          window.location.href = 'submit.html';
+        }
+      }
+    });
+
+    // INITIAL CHECK: Handles fast page renders if session token is in URL fragment
+    window.addEventListener('DOMContentLoaded', async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
+        const userEmail = session.user.email.toLowerCase();
+        if (AUTHORIZED_MODERATORS.includes(userEmail)) {
+          window.location.href = 'moderate.html';
+        } else {
+          window.location.href = 'submit.html';
+        }
       }
     });
   </script>
