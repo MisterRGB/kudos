@@ -2,23 +2,35 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- Ensure proper scaling on mobile devices -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Student Login - Kudos Portal</title>
+  
+  <!-- 1. Include Tailwind CSS for rapid styling -->
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 2. Include Supabase JavaScript SDK library -->
+  <!-- This script creates a global 'supabase' object in the browser context -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 text-slate-800">
 
+  <!-- MAIN CONTAINER: Centered card layout -->
   <main class="max-w-md w-full bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+    
+    <!-- PAGE HEADER -->
     <div class="text-center mb-6">
       <h1 class="text-2xl font-bold text-slate-900">Kudos Portal</h1>
       <p class="text-sm text-slate-500 mt-1">Sign in with your school email to send a compliment</p>
     </div>
 
-    <!-- LOGIN FORM -->
+    <!-- STUDENT LOGIN FORM -->
+    <!-- The 'onsubmit' event catches the form submission and passes it to our JavaScript handler -->
     <form onsubmit="handleLogin(event)" class="space-y-4">
       <div>
-        <label for="student-email" class="block text-xs font-semibold text-slate-600 uppercase mb-1">School Email</label>
+        <label for="student-email" class="block text-xs font-semibold text-slate-600 uppercase mb-1">
+          School Email
+        </label>
         <input 
           type="email" 
           id="student-email" 
@@ -27,62 +39,112 @@
           class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
-      <button id="submit-btn" type="submit" class="w-full bg-indigo-600 text-white font-medium py-2 rounded-lg text-sm hover:bg-indigo-700 transition">
+
+      <button 
+        id="submit-btn" 
+        type="submit" 
+        class="w-full bg-indigo-600 text-white font-medium py-2 rounded-lg text-sm hover:bg-indigo-700 transition"
+      >
         Send Magic Login Link
       </button>
     </form>
 
-    <!-- STATUS DISPLAY BOX -->
+    <!-- DYNAMIC STATUS BANNER: Hidden by default, populated by JavaScript upon errors or success -->
     <div id="status-message" class="mt-4 p-3 rounded-lg text-xs font-mono hidden"></div>
   </main>
 
   <script>
-  const SUPABASE_URL = 'https://eaulqdtjrqmnjgjgbzsp.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
+    // ==========================================
+    // SECTION 1: SUPABASE INITIALIZATION
+    // ==========================================
+    // API Credentials for connecting our frontend to the Supabase backend project
+    const SUPABASE_URL = 'https://eaulqdtjrqmnjgjgbzsp.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
 
-  // Instantiate client with supabaseClient to avoid variable collision
-  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // CRITICAL LESSON FOR STUDENTS:
+    // We name our connection instance 'supabaseClient' (NOT 'supabase').
+    // Naming it 'supabase' causes a variable collision with the global SDK library loaded in the <head>.
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  function showStatus(msg, isError = false) {
-    const el = document.getElementById('status-message');
-    el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
-    el.classList.add(isError ? 'bg-red-100' : 'bg-green-100', isError ? 'text-red-700' : 'text-green-700');
-    el.textContent = msg;
-  }
+    // ==========================================
+    // SECTION 2: UI FEEDBACK HELPER
+    // ==========================================
+    /**
+     * Updates and displays the alert box on screen.
+     * @param {string} msg - The text to display.
+     * @param {boolean} isError - Controls whether the message is styled Red (Error) or Green (Success).
+     */
+    function showStatus(msg, isError = false) {
+      const el = document.getElementById('status-message');
+      
+      // Clear existing color classes
+      el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+      
+      // Apply correct alert styling based on 'isError' boolean
+      el.classList.add(isError ? 'bg-red-100' : 'bg-green-100', isError ? 'text-red-700' : 'text-green-700');
+      
+      // Set the message text
+      el.textContent = msg;
+    }
 
-  async function handleLogin(event) {
-    event.preventDefault();
-    const btn = document.getElementById('submit-btn');
-    const email = document.getElementById('student-email').value;
+    // ==========================================
+    // SECTION 3: LOGIN FORM HANDLER
+    // ==========================================
+    /**
+     * Triggered when the student clicks 'Send Magic Login Link'.
+     */
+    async function handleLogin(event) {
+      // Prevent standard browser form submission (which reloads the whole web page)
+      event.preventDefault();
 
-    btn.disabled = true;
-    btn.textContent = 'Sending link...';
+      const btn = document.getElementById('submit-btn');
+      const emailInput = document.getElementById('student-email').value;
 
-    try {
-      const { error } = await supabaseClient.auth.signInWithOtp({
-        email: email,
-        options: {
-          // Redirect straight to the submission form after login click
-          emailRedirectTo: 'https://misterrgb.github.io/kudos/submit.html'
+      // Provide immediate UX feedback and disable the button to prevent duplicate clicks
+      btn.disabled = true;
+      btn.textContent = 'Sending link...';
+
+      try {
+        // Request a Magic Link OTP email from Supabase Auth
+        const { error } = await supabaseClient.auth.signInWithOtp({
+          email: emailInput,
+          options: {
+            // REDIRECT TARGET: Once the student clicks the link in their email, 
+            // Supabase sends them directly to the compliment submission page!
+            emailRedirectTo: 'https://misterrgb.github.io/kudos/submit.html'
+          }
+        });
+
+        if (error) {
+          // Display API error message (e.g., rate limits, bad domain)
+          showStatus('Error: ' + error.message, true);
+        } else {
+          // Display success instructions
+          showStatus('Success! Check your email inbox for your magic login link.', false);
         }
-      });
-
-      if (error) showStatus('Error: ' + error.message, true);
-      else showStatus('Success! Check your inbox for the magic link.', false);
-    } catch (err) {
-      showStatus('Error: ' + err.message, true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Send Magic Login Link';
+      } catch (err) {
+        // Catch unexpected network crashes or client-side errors
+        showStatus('Unexpected Error: ' + err.message, true);
+      } finally {
+        // Restore button state after request finishes
+        btn.disabled = false;
+        btn.textContent = 'Send Magic Login Link';
+      }
     }
-  }
 
-  // AUTH GUARD: If already logged in, skip login page and go straight to submission form
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    if (session) {
-      window.location.href = 'submit.html';
-    }
-  });
-</script>
+    // ==========================================
+    // SECTION 4: AUTHENTICATION GUARD
+    // ==========================================
+    /**
+     * Listens for authentication changes automatically.
+     * If the student is ALREADY logged in (or just returned from clicking their email link),
+     * automatically redirect them past this login screen straight to submit.html.
+     */
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        window.location.href = 'submit.html';
+      }
+    });
+  </script>
 </body>
 </html>

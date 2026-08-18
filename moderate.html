@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moderation Queue - Kudos Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans p-4 md:p-8">
+
+  <!-- PAGE HEADER -->
+  <header class="max-w-3xl mx-auto flex justify-between items-center pb-6 mb-8 border-b border-slate-200">
+    <div>
+      <h1 class="text-xl font-bold text-slate-900">Moderation Dashboard</h1>
+      <p class="text-xs text-slate-500">Review and moderate student compliments</p>
+    </div>
+    <!-- Dynamic pending counter badge -->
+    <span id="pending-count" class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-semibold">0 Pending</span>
+  </header>
+
+  <!-- MODERATION QUEUE DISPLAY AREA -->
+  <main class="max-w-3xl mx-auto">
+    <div id="queue-list" class="space-y-4">
+      <p class="text-sm text-slate-400 italic">Loading moderation queue...</p>
+    </div>
+  </main>
+
+  <script>
+    // ==========================================
+    // SECTION 1: SUPABASE INITIALIZATION
+    // ==========================================
+    const SUPABASE_URL = 'https://eaulqdtjrqmnjgjgbzsp.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Load queue on initial page load
+    loadQueue();
+
+    // ==========================================
+    // SECTION 2: READ OPERATION (RELATIONAL QUERY)
+    // ==========================================
+    /**
+     * Performs a relational join between 'compliments' and 'teachers' tables,
+     * filtering for rows where status = 'pending'.
+     */
+    async function loadQueue() {
+      // ADVANCED CONCEPT: Relational SELECT
+      // Syntax 'teachers(name, email)' asks Supabase to automatically join the linked 
+      // row from the 'teachers' table via Foreign Key relationship!
+      const { data: pending, error } = await supabaseClient
+        .from('compliments')
+        .select('id, message, created_at, teachers(name, email)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true }); // Oldest first
+
+      if (error) {
+        console.error('Error fetching queue:', error.message);
+        return;
+      }
+
+      const container = document.getElementById('queue-list');
+      document.getElementById('pending-count').textContent = `${pending.length} Pending`;
+
+      // EMPTY STATE: Display message if no pending items remain
+      if (pending.length === 0) {
+        container.innerHTML = '<div class="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-400 italic text-sm">No pending compliments to review. Good job!</div>';
+        return;
+      }
+
+      // MAP DATA TO HTML: Loop through pending array and dynamically output UI card templates
+      container.innerHTML = pending.map(item => `
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex justify-between items-center text-xs">
+            <!-- Access joined relational object property: item.teachers.name -->
+            <span class="font-bold text-indigo-600 uppercase tracking-wide">To: ${item.teachers?.name || 'Teacher'}</span>
+            <span class="text-slate-400">${new Date(item.created_at).toLocaleDateString()}</span>
+          </div>
+          
+          <p class="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-100">"${item.message}"</p>
+          
+          <!-- MODERATION ACTION BUTTONS -->
+          <div class="flex gap-2 pt-1">
+            <button onclick="setStatus('${item.id}', 'approved')" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-700 font-medium transition">
+              Approve & Send
+            </button>
+            <button onclick="setStatus('${item.id}', 'rejected')" class="bg-red-50 text-red-600 text-xs px-3 py-1.5 rounded-lg hover:bg-red-100 font-medium transition">
+              Reject
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ==========================================
+    // SECTION 3: UPDATE OPERATION (MODERATION STATUS)
+    // ==========================================
+    /**
+     * Updates an existing compliment record's status to either 'approved' or 'rejected'.
+     * @param {string} id - The Primary Key UUID of the compliment row.
+     * @param {string} statusChoice - The new status string ('approved' | 'rejected').
+     */
+    async function setStatus(id, statusChoice) {
+      // SQL Equivalent: UPDATE compliments SET status = statusChoice WHERE id = id;
+      const { error } = await supabaseClient
+        .from('compliments')
+        .update({ status: statusChoice })
+        .eq('id', id);
+
+      if (error) {
+        alert('Database update failed: ' + error.message);
+      } else {
+        // Re-query database and rebuild UI queue dynamically
+        loadQueue();
+      }
+    }
+  </script>
+</body>
+</html>
