@@ -5,16 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Teacher Compliment Portal</title>
   
+  <!-- Modern UI styling via Tailwind CSS (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Supabase Official JavaScript SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 font-sans p-4 md:p-8">
 
+  <!-- =========================================================================
+       APPLICATION HEADER
+       Why: Provides consistent navigation and user status across all views.
+       ========================================================================= -->
   <header class="max-w-3xl mx-auto flex justify-between items-center pb-6 mb-8 border-b border-slate-200">
     <div>
       <h1 class="text-2xl font-bold text-slate-900">Kudos Portal</h1>
       <p class="text-sm text-slate-500">Send a compliment to your teachers</p>
     </div>
+    
+    <!-- Dynamic Auth Badge: Updates automatically based on login state -->
     <div id="auth-status" class="text-right">
       <span id="user-email-display" class="text-xs text-slate-500 block mb-1">Not logged in</span>
       <button id="logout-btn" onclick="handleLogout()" class="hidden text-xs text-red-600 hover:underline">Log Out</button>
@@ -23,57 +32,78 @@
 
   <main class="max-w-3xl mx-auto space-y-8">
 
-    <!-- LOGIN FORM -->
+    <!-- =======================================================================
+         SECTION 1: AUTHENTICATION FORM (LOGIN / SIGNUP)
+         Why: Forces students to verify their identity before submitting data.
+         This section hides automatically once the student logs in.
+         ======================================================================= -->
     <section id="auth-section" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
       <h2 class="text-lg font-semibold mb-2">Student Login</h2>
-      <p class="text-sm text-slate-600 mb-4">Enter your school email to receive a Magic Login Link.</p>
+      <p class="text-sm text-slate-600 mb-4">Enter your school email to receive a Magic Login Link. No password required!</p>
       
       <form onsubmit="handleMagicLinkLogin(event)" class="space-y-4">
         <div>
-          <label for="student-email" class="block text-xs font-semibold text-slate-600 uppercase mb-1">Email</label>
+          <label for="student-email" class="block text-xs font-semibold text-slate-600 uppercase mb-1">School Email</label>
           <input 
             type="email" 
             id="student-email" 
             required 
-            placeholder="your-email@school.ac.nz" 
+            placeholder="student@school.ac.nz" 
             class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
-        <button id="submit-btn" type="submit" class="w-full bg-indigo-600 text-white font-medium py-2 rounded-lg text-sm hover:bg-indigo-700 transition">
+        <button type="submit" class="w-full bg-indigo-600 text-white font-medium py-2 rounded-lg text-sm hover:bg-indigo-700 transition">
           Send Magic Login Link
         </button>
       </form>
-
-      <!-- Status Display Box -->
-      <div id="status-message" class="mt-4 p-3 rounded-lg text-xs font-mono hidden"></div>
     </section>
 
-    <!-- COMPLIMENT FORM -->
+    <!-- =======================================================================
+         SECTION 2: STUDENT COMPLIMENT SUBMISSION FORM
+         Why: Allows authenticated students to select a teacher and submit praise.
+         Hidden by default; becomes visible only after successful login.
+         ======================================================================= -->
     <section id="compliment-section" class="hidden bg-white p-6 rounded-xl shadow-sm border border-slate-200">
       <h2 class="text-lg font-semibold mb-4">Submit a Compliment</h2>
+      
       <form onsubmit="handleComplimentSubmit(event)" class="space-y-4">
         <div>
           <label for="teacher-select" class="block text-xs font-semibold text-slate-600 uppercase mb-1">Select Teacher</label>
           <select id="teacher-select" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="">-- Choose a teacher --</option>
+            <!-- Dynamically populated from Supabase 'teachers' table -->
           </select>
         </div>
+
         <div>
           <label for="compliment-message" class="block text-xs font-semibold text-slate-600 uppercase mb-1">Your Compliment</label>
-          <textarea id="compliment-message" required rows="4" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+          <textarea 
+            id="compliment-message" 
+            required 
+            rows="4" 
+            placeholder="What did this teacher do that was awesome?" 
+            class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          ></textarea>
         </div>
+
         <button type="submit" class="w-full bg-emerald-600 text-white font-medium py-2 rounded-lg text-sm hover:bg-emerald-700 transition">
           Submit for Moderation
         </button>
       </form>
     </section>
 
-    <!-- MODERATION QUEUE -->
+    <!-- =======================================================================
+         SECTION 3: MODERATION DASHBOARD (STAFF / ADMIN)
+         Why: Provides a review queue where pending compliments can be approved
+         and forwarded via email, or rejected.
+         ======================================================================= -->
     <section id="moderation-section" class="hidden bg-white p-6 rounded-xl shadow-sm border border-slate-200">
       <div class="flex justify-between items-center mb-4">
         <h2 class="text-lg font-semibold">Moderation Queue</h2>
         <span id="pending-count" class="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded-full font-medium">0 Pending</span>
       </div>
+      
+      <!-- Container where pending compliment cards are injected dynamically -->
       <div id="moderation-list" class="space-y-4">
         <p class="text-sm text-slate-400 italic">Loading pending compliments...</p>
       </div>
@@ -81,139 +111,202 @@
 
   </main>
 
+  <!-- =========================================================================
+       JAVASCRIPT LOGIC & SUPABASE INTEGRATION
+       Why: Handles client-side interactivity, API requests, state management,
+       and real-time UI switching based on authentication state.
+       ========================================================================= -->
   <script>
-  const SUPABASE_URL = 'https://eaulqdtjrqmnjgjgbzsp.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
+    /* -------------------------------------------------------------------------
+       1. INITIALIZATION & CONFIGURATION
+       Why: Establishes connection parameters for your Supabase backend.
+       ------------------------------------------------------------------------- */
+    const SUPABASE_URL = 'https://eaulqdtjrqmnjgjgbzsp.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
+    
+    // Initialize the SDK client
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // FIX: Name the client 'supabaseClient' instead of 'supabase' to prevent naming conflicts
-  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    /* -------------------------------------------------------------------------
+       2. AUTHENTICATION HANDLERS
+       Why: Controls user login sessions via Supabase passwordless Magic Links.
+       ------------------------------------------------------------------------- */
+    async function handleMagicLinkLogin(event) {
+  event.preventDefault();
+  const email = document.getElementById('student-email').value;
 
-  function showStatus(msg, isError = false) {
-    const el = document.getElementById('status-message');
-    el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'bg-blue-100', 'text-blue-700');
-    if (isError) {
-      el.classList.add('bg-red-100', 'text-red-700');
-    } else {
-      el.classList.add('bg-green-100', 'text-green-700');
-    }
-    el.textContent = msg;
-  }
-
-  async function handleMagicLinkLogin(event) {
-    event.preventDefault();
-    const btn = document.getElementById('submit-btn');
-    const email = document.getElementById('student-email').value;
-
-    btn.disabled = true;
-    btn.textContent = 'Contacting Supabase...';
-    showStatus('Sending request to Supabase...', false);
-
-    try {
-      const { data, error } = await supabaseClient.auth.signInWithOtp({
-        email: email,
-        options: {
-          emailRedirectTo: 'https://misterrgb.github.io/kudos/'
-        }
-      });
-
-      if (error) {
-        showStatus('SUPABASE ERROR: ' + error.message, true);
-      } else {
-        showStatus('SUCCESS! Magic link sent. Check your inbox (and spam folder).', false);
-      }
-    } catch (err) {
-      showStatus('NETWORK/JS ERROR: ' + err.message, true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Send Magic Login Link';
-    }
-  }
-
-  async function handleLogout() {
-    await supabaseClient.auth.signOut();
-    window.location.reload();
-  }
-
-  async function loadTeachers() {
-    const { data: teachers, error } = await supabaseClient.from('teachers').select('id, name').order('name');
-    if (error) return;
-    const selectEl = document.getElementById('teacher-select');
-    selectEl.innerHTML = '<option value="">-- Choose a teacher --</option>';
-    teachers.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = t.name;
-      selectEl.appendChild(opt);
-    });
-  }
-
-  async function handleComplimentSubmit(event) {
-    event.preventDefault();
-    const teacherId = document.getElementById('teacher-select').value;
-    const message = document.getElementById('compliment-message').value;
-    const { error } = await supabaseClient.from('compliments').insert([{ teacher_id: teacherId, message: message }]);
-    if (error) {
-      alert('Failed: ' + error.message);
-    } else {
-      alert('Submitted for moderation!');
-      document.getElementById('compliment-message').value = '';
-    }
-  }
-
-  async function loadModerationQueue() {
-    const { data: pending, error } = await supabaseClient
-      .from('compliments')
-      .select('id, message, created_at, teachers(name, email)')
-      .eq('status', 'pending');
-    if (error) return;
-
-    const container = document.getElementById('moderation-list');
-    document.getElementById('pending-count').textContent = `${pending.length} Pending`;
-    if (pending.length === 0) {
-      container.innerHTML = '<p class="text-sm text-slate-400 italic">No pending compliments.</p>';
-      return;
-    }
-    container.innerHTML = pending.map(item => `
-      <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-2">
-        <span class="text-xs font-bold text-indigo-600 uppercase">To: ${item.teachers?.name || 'Teacher'}</span>
-        <p class="text-sm text-slate-700 italic">"${item.message}"</p>
-        <div class="flex gap-2 pt-2">
-          <button onclick="updateStatus('${item.id}', 'approved')" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded">Approve & Email</button>
-          <button onclick="updateStatus('${item.id}', 'rejected')" class="bg-red-100 text-red-600 text-xs px-3 py-1.5 rounded">Reject</button>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  async function updateStatus(id, newStatus) {
-    const { error } = await supabaseClient.from('compliments').update({ status: newStatus }).eq('id', id);
-    if (error) alert(error.message);
-    else loadModerationQueue();
-  }
-
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    const authSection = document.getElementById('auth-section');
-    const complimentSection = document.getElementById('compliment-section');
-    const moderationSection = document.getElementById('moderation-section');
-    const userDisplay = document.getElementById('user-email-display');
-    const logoutBtn = document.getElementById('logout-btn');
-
-    if (session) {
-      authSection.classList.add('hidden');
-      complimentSection.classList.remove('hidden');
-      moderationSection.classList.remove('hidden');
-      userDisplay.textContent = session.user.email;
-      logoutBtn.classList.remove('hidden');
-      loadTeachers();
-      loadModerationQueue();
-    } else {
-      authSection.classList.remove('hidden');
-      complimentSection.classList.add('hidden');
-      moderationSection.classList.add('hidden');
-      userDisplay.textContent = 'Not logged in';
-      logoutBtn.classList.add('hidden');
+  const { error } = await supabase.auth.signInWithOtp({
+    email: email,
+    options: {
+      // Explicitly state your GitHub Pages URL here
+      emailRedirectTo: 'https://misterrgb.github.io/kudos/'
     }
   });
-</script>
+
+  if (error) {
+    alert('Error logging in: ' + error.message);
+  } else {
+    alert('Check your inbox! We sent you a magic login link.');
+  }
+}
+
+      if (error) {
+        alert('Error logging in: ' + error.message);
+      } else {
+        alert('Check your inbox! We sent you a magic login link.');
+      }
+    
+
+    async function handleLogout() {
+      await supabase.auth.signOut();
+      window.location.reload();
+    }
+
+    /* -------------------------------------------------------------------------
+       3. DATA LOADING & DYNAMIC POPULATION
+       Why: Fetches teacher records from PostgreSQL to build form dropdowns.
+       ------------------------------------------------------------------------- */
+    async function loadTeachers() {
+      const { data: teachers, error } = await supabase
+        .from('teachers')
+        .select('id, name')
+        .order('name');
+
+      if (error) {
+        console.error('Failed to load teachers:', error);
+        return;
+      }
+
+      const selectEl = document.getElementById('teacher-select');
+      selectEl.innerHTML = '<option value="">-- Choose a teacher --</option>';
+      
+      teachers.forEach(teacher => {
+        const option = document.createElement('option');
+        option.value = teacher.id;
+        option.textContent = teacher.name;
+        selectEl.appendChild(option);
+      });
+    }
+
+    /* -------------------------------------------------------------------------
+       4. STUDENT SUBMISSION HANDLER
+       Why: Sends the student's compliment text to Supabase. Note that 
+       'student_id' is filled automatically by RLS default rules in SQL.
+       ------------------------------------------------------------------------- */
+    async function handleComplimentSubmit(event) {
+      event.preventDefault();
+      const teacherId = document.getElementById('teacher-select').value;
+      const message = document.getElementById('compliment-message').value;
+
+      const { error } = await supabase
+        .from('compliments')
+        .insert([{ teacher_id: teacherId, message: message }]);
+
+      if (error) {
+        alert('Failed to submit compliment: ' + error.message);
+      } else {
+        alert('Thank you! Your compliment has been submitted for moderation.');
+        document.getElementById('compliment-message').value = '';
+      }
+    }
+
+    /* -------------------------------------------------------------------------
+       5. MODERATION ENGINE
+       Why: Fetches unapproved comments and provides triggers to update 
+       the status to 'approved' (which fires the email) or 'rejected'.
+       ------------------------------------------------------------------------- */
+    async function loadModerationQueue() {
+      const { data: pending, error } = await supabase
+        .from('compliments')
+        .select(`
+          id,
+          message,
+          created_at,
+          teachers ( name, email )
+        `)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching queue:', error);
+        return;
+      }
+
+      const container = document.getElementById('moderation-list');
+      document.getElementById('pending-count').textContent = `${pending.length} Pending`;
+
+      if (pending.length === 0) {
+        container.innerHTML = '<p class="text-sm text-slate-400 italic">No pending compliments to review.</p>';
+        return;
+      }
+
+      container.innerHTML = pending.map(item => `
+        <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-2">
+          <div class="flex justify-between items-start">
+            <span class="text-xs font-bold text-indigo-600 uppercase">To: ${item.teachers?.name || 'Teacher'}</span>
+            <span class="text-xs text-slate-400">${new Date(item.created_at).toLocaleDateString()}</span>
+          </div>
+          <p class="text-sm text-slate-700 italic">"${item.message}"</p>
+          <div class="flex gap-2 pt-2">
+            <button onclick="updateStatus('${item.id}', 'approved')" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-700 font-medium">
+              Approve & Email Teacher
+            </button>
+            <button onclick="updateStatus('${item.id}', 'rejected')" class="bg-red-100 text-red-600 text-xs px-3 py-1.5 rounded hover:bg-red-200 font-medium">
+              Reject
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function updateStatus(complimentId, newStatus) {
+      const { error } = await supabase
+        .from('compliments')
+        .update({ status: newStatus })
+        .eq('id', complimentId);
+
+      if (error) {
+        alert('Update failed: ' + error.message);
+      } else {
+        // Refresh queue UI after status change
+        loadModerationQueue();
+      }
+    }
+
+    /* -------------------------------------------------------------------------
+       6. APP BOOTSTRAP & AUTH LISTENER
+       Why: Listens for authentication changes (log in / log out) and toggles
+       visible interface elements automatically based on session state.
+       ------------------------------------------------------------------------- */
+    supabase.auth.onAuthStateChange((event, session) => {
+      const authSection = document.getElementById('auth-section');
+      const complimentSection = document.getElementById('compliment-section');
+      const moderationSection = document.getElementById('moderation-section');
+      const userDisplay = document.getElementById('user-email-display');
+      const logoutBtn = document.getElementById('logout-btn');
+
+      if (session) {
+        // User is logged in
+        authSection.classList.add('hidden');
+        complimentSection.classList.remove('hidden');
+        moderationSection.classList.remove('hidden'); // Reveal moderation panel
+        
+        userDisplay.textContent = session.user.email;
+        logoutBtn.classList.remove('hidden');
+
+        // Fetch application data
+        loadTeachers();
+        loadModerationQueue();
+      } else {
+        // User is logged out
+        authSection.classList.remove('hidden');
+        complimentSection.classList.add('hidden');
+        moderationSection.classList.add('hidden');
+        
+        userDisplay.textContent = 'Not logged in';
+        logoutBtn.classList.add('hidden');
+      }
+    });
+  </script>
 </body>
 </html>
