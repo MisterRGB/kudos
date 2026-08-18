@@ -9,14 +9,21 @@
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 font-sans p-4 md:p-8">
 
-  <!-- PAGE HEADER -->
+  <!-- PAGE HEADER WITH LOGOUT -->
   <header class="max-w-3xl mx-auto flex justify-between items-center pb-6 mb-8 border-b border-slate-200">
     <div>
       <h1 class="text-xl font-bold text-slate-900">Moderation Dashboard</h1>
-      <p class="text-xs text-slate-500">Review and moderate student compliments</p>
+      <!-- Display logged-in staff email -->
+      <p class="text-xs text-slate-500" id="user-display">Verifying staff session...</p>
     </div>
-    <!-- Dynamic pending counter badge -->
-    <span id="pending-count" class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-semibold">0 Pending</span>
+    
+    <div class="flex items-center gap-4">
+      <!-- Dynamic pending counter badge -->
+      <span id="pending-count" class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-semibold">0 Pending</span>
+      
+      <!-- LOG OUT BUTTON -->
+      <button onclick="handleLogout()" class="text-xs text-red-600 hover:underline font-medium">Log Out</button>
+    </div>
   </header>
 
   <!-- MODERATION QUEUE DISPLAY AREA -->
@@ -34,25 +41,49 @@
     const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Load queue on initial page load
-    loadQueue();
+    // List of authorized moderator emails
+    const AUTHORIZED_MODERATORS = [
+      'npghsdigitech@gmail.com',
+      '2013bermol@npghs.school.nz'
+    ];
 
     // ==========================================
-    // SECTION 2: READ OPERATION (RELATIONAL QUERY)
+    // SECTION 2: AUTH & ROLE GUARD
     // ==========================================
     /**
-     * Performs a relational join between 'compliments' and 'teachers' tables,
-     * filtering for rows where status = 'pending'.
+     * Verifies user session and ensures only allowed moderators can access this dashboard.
+     */
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        // Not logged in -> redirect to login screen
+        window.location.href = 'index.html';
+      } else {
+        const userEmail = session.user.email.toLowerCase();
+
+        // Check if user is in moderator list
+        if (!AUTHORIZED_MODERATORS.includes(userEmail)) {
+          alert('Access denied: You do not have moderator privileges.');
+          window.location.href = 'submit.html';
+        } else {
+          // Display active email and fetch queue data
+          document.getElementById('user-display').textContent = `Moderator: ${session.user.email}`;
+          loadQueue();
+        }
+      }
+    });
+
+    // ==========================================
+    // SECTION 3: READ OPERATION (FETCH QUEUE)
+    // ==========================================
+    /**
+     * Performs a relational query to fetch pending compliments alongside teacher details.
      */
     async function loadQueue() {
-      // ADVANCED CONCEPT: Relational SELECT
-      // Syntax 'teachers(name, email)' asks Supabase to automatically join the linked 
-      // row from the 'teachers' table via Foreign Key relationship!
       const { data: pending, error } = await supabaseClient
         .from('compliments')
         .select('id, message, created_at, teachers(name, email)')
         .eq('status', 'pending')
-        .order('created_at', { ascending: true }); // Oldest first
+        .order('created_at', { ascending: true });
 
       if (error) {
         console.error('Error fetching queue:', error.message);
@@ -62,24 +93,20 @@
       const container = document.getElementById('queue-list');
       document.getElementById('pending-count').textContent = `${pending.length} Pending`;
 
-      // EMPTY STATE: Display message if no pending items remain
       if (pending.length === 0) {
         container.innerHTML = '<div class="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-400 italic text-sm">No pending compliments to review. Good job!</div>';
         return;
       }
 
-      // MAP DATA TO HTML: Loop through pending array and dynamically output UI card templates
       container.innerHTML = pending.map(item => `
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
           <div class="flex justify-between items-center text-xs">
-            <!-- Access joined relational object property: item.teachers.name -->
             <span class="font-bold text-indigo-600 uppercase tracking-wide">To: ${item.teachers?.name || 'Teacher'}</span>
             <span class="text-slate-400">${new Date(item.created_at).toLocaleDateString()}</span>
           </div>
           
           <p class="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-100">"${item.message}"</p>
           
-          <!-- MODERATION ACTION BUTTONS -->
           <div class="flex gap-2 pt-1">
             <button onclick="setStatus('${item.id}', 'approved')" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-700 font-medium transition">
               Approve & Send
@@ -93,15 +120,12 @@
     }
 
     // ==========================================
-    // SECTION 3: UPDATE OPERATION (MODERATION STATUS)
+    // SECTION 4: UPDATE OPERATION (MODERATION ACTION)
     // ==========================================
     /**
-     * Updates an existing compliment record's status to either 'approved' or 'rejected'.
-     * @param {string} id - The Primary Key UUID of the compliment row.
-     * @param {string} statusChoice - The new status string ('approved' | 'rejected').
+     * Updates status in database to 'approved' or 'rejected'.
      */
     async function setStatus(id, statusChoice) {
-      // SQL Equivalent: UPDATE compliments SET status = statusChoice WHERE id = id;
       const { error } = await supabaseClient
         .from('compliments')
         .update({ status: statusChoice })
@@ -110,38 +134,20 @@
       if (error) {
         alert('Database update failed: ' + error.message);
       } else {
-        // Re-query database and rebuild UI queue dynamically
-        loadQueue();
+        loadQueue(); // Re-render queue dynamically
       }
     }
 
-        // List of allowed moderator email addresses
-    const AUTHORIZED_MODERATORS = [
-      'mihsterbee@gmail.com',
-      '2023bermol@school.ac.nz',
-      'nbouterey@npghs.school.nz'
-    ];
-
-    // AUTH & ROLE GUARD
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        // 1. If not logged in at all, send to login screen
-        alert('Access restricted. Please log in first.');
-        window.location.href = 'index.html';
-      } else {
-        const userEmail = session.user.email;
-        
-        // 2. Check if the user's email is in the allowed moderator list
-        if (!AUTHORIZED_MODERATORS.includes(userEmail)) {
-          alert('Access denied: Your account does not have moderator privileges.');
-          window.location.href = 'submit.html'; // Redirect unauthorized users to student form
-        } else {
-          // 3. User is authorized -> load the moderation queue
-          loadQueue();
-        }
-      }
-    });
-  
+    // ==========================================
+    // SECTION 5: LOGOUT HANDLER
+    // ==========================================
+    /**
+     * Revokes auth tokens and sends user back to login screen.
+     */
+    async function handleLogout() {
+      await supabaseClient.auth.signOut();
+      window.location.href = 'index.html';
+    }
   </script>
 </body>
 </html>
