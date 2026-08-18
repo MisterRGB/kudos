@@ -114,6 +114,33 @@
         loadQueue();
       }
     }
+
+        // List of allowed moderator email addresses
+    const AUTHORIZED_MODERATORS = [
+      'nbouterey@school.ac.nz',
+      '2023bermol@school.ac.nz'
+    ];
+
+    // AUTH & ROLE GUARD
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        // 1. If not logged in at all, send to login screen
+        alert('Access restricted. Please log in first.');
+        window.location.href = 'index.html';
+      } else {
+        const userEmail = session.user.email;
+        
+        // 2. Check if the user's email is in the allowed moderator list
+        if (!AUTHORIZED_MODERATORS.includes(userEmail)) {
+          alert('Access denied: Your account does not have moderator privileges.');
+          window.location.href = 'submit.html'; // Redirect unauthorized users to student form
+        } else {
+          // 3. User is authorized -> load the moderation queue
+          loadQueue();
+        }
+      }
+    });
+  
   </script>
 </body>
 </html>
