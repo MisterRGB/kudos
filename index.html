@@ -133,44 +133,56 @@
     }
 
 // ==========================================
-    // SECTION 4: SMART AUTHENTICATION GUARD & ROUTER
-    // ==========================================
-    // List of moderator emails that should be sent directly to the moderation dashboard
-    const AUTHORIZED_MODERATORS = [
-      'mihsterb@gmail.com',
-      '2023bermol@npghs.school.nz',
-      'nbouterey@npghs.school.nz'
-    ];
+// SECTION 4: SMART AUTHENTICATION GUARD & ROUTER
+// ==========================================
+const AUTHORIZED_MODERATORS = [
+  'mihsterb@gmail.com',
+  '2023bermol@npghs.school.nz',
+  'nbouterey@npghs.school.nz'
+];
 
-    /**
-     * Listens for authentication changes automatically.
-     * Directs moderators to moderate.html and students to submit.html.
-     */
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        const userEmail = session.user.email.toLowerCase();
+/**
+ * Handles all routing automatically.
+ * Supabase triggers this on page load AND after magic link tokens are parsed.
+ */
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (session && session.user) {
+    const userEmail = session.user.email.toLowerCase().trim();
+    console.log("Authenticated User:", userEmail);
 
-        // Check if the logged-in email is in our moderator list
-        if (AUTHORIZED_MODERATORS.includes(userEmail)) {
-          window.location.href = 'moderate.html';
-        } else {
-          window.location.href = 'submit.html';
-        }
-      }
-    });
+    if (AUTHORIZED_MODERATORS.includes(userEmail)) {
+      console.log("Access granted: Redirecting to moderate.html");
+      window.location.href = 'moderate.html';
+    } else {
+      console.log("Standard access: Redirecting to submit.html");
+      window.location.href = 'submit.html';
+    }
+  }
+});
 
-    // INITIAL CHECK: Handles fast page renders if session token is in URL fragment
-    window.addEventListener('DOMContentLoaded', async () => {
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      if (session) {
-        const userEmail = session.user.email.toLowerCase();
-        if (AUTHORIZED_MODERATORS.includes(userEmail)) {
-          window.location.href = 'moderate.html';
-        } else {
-          window.location.href = 'submit.html';
-        }
-      }
-    });
+// Magic Link Trigger Function
+async function handleMagicLink() {
+  const emailInput = document.getElementById('email-input').value.trim();
+  
+  if (!emailInput) {
+    alert('Please enter your email address.');
+    return;
+  }
+
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email: emailInput,
+    options: {
+      // CRITICAL: Must point back to index.html so the router above can inspect the email!
+      emailRedirectTo: 'https://misterrgb.github.io/kudos/index.html'
+    }
+  });
+
+  if (error) {
+    alert('Error sending link: ' + error.message);
+  } else {
+    alert('Magic Link sent! Check your inbox.');
+  }
+}
   </script>
 </body>
 </html>
