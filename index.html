@@ -82,137 +82,138 @@
   </main>
 
   <script>
-    const SUPABASE_URL = 'https://eaulqdtjrqmnjgjgbzsp.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
+  const SUPABASE_URL = 'https://eaulqdtjrqmnjgjgbzsp.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
 
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // FIX: Name the client 'supabaseClient' instead of 'supabase' to prevent naming conflicts
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    function showStatus(msg, isError = false) {
-      const el = document.getElementById('status-message');
-      el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'bg-blue-100', 'text-blue-700');
-      if (isError) {
-        el.classList.add('bg-red-100', 'text-red-700');
-      } else {
-        el.classList.add('bg-green-100', 'text-green-700');
-      }
-      el.textContent = msg;
+  function showStatus(msg, isError = false) {
+    const el = document.getElementById('status-message');
+    el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'bg-blue-100', 'text-blue-700');
+    if (isError) {
+      el.classList.add('bg-red-100', 'text-red-700');
+    } else {
+      el.classList.add('bg-green-100', 'text-green-700');
     }
+    el.textContent = msg;
+  }
 
-    async function handleMagicLinkLogin(event) {
-      event.preventDefault();
-      const btn = document.getElementById('submit-btn');
-      const email = document.getElementById('student-email').value;
+  async function handleMagicLinkLogin(event) {
+    event.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    const email = document.getElementById('student-email').value;
 
-      btn.disabled = true;
-      btn.textContent = 'Contacting Supabase...';
-      showStatus('Sending request to Supabase...', false);
+    btn.disabled = true;
+    btn.textContent = 'Contacting Supabase...';
+    showStatus('Sending request to Supabase...', false);
 
-      try {
-        const { data, error } = await supabase.auth.signInWithOtp({
-          email: email,
-          options: {
-            emailRedirectTo: 'https://misterrgb.github.io/kudos/'
-          }
-        });
-
-        if (error) {
-          showStatus('SUPABASE ERROR: ' + error.message, true);
-        } else {
-          showStatus('SUCCESS! Magic link sent. Check your inbox (and spam folder).', false);
+    try {
+      const { data, error } = await supabaseClient.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: 'https://misterrgb.github.io/kudos/'
         }
-      } catch (err) {
-        showStatus('NETWORK/JS ERROR: ' + err.message, true);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Send Magic Login Link';
-      }
-    }
-
-    async function handleLogout() {
-      await supabase.auth.signOut();
-      window.location.reload();
-    }
-
-    async function loadTeachers() {
-      const { data: teachers, error } = await supabase.from('teachers').select('id, name').order('name');
-      if (error) return;
-      const selectEl = document.getElementById('teacher-select');
-      selectEl.innerHTML = '<option value="">-- Choose a teacher --</option>';
-      teachers.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = t.name;
-        selectEl.appendChild(opt);
       });
-    }
 
-    async function handleComplimentSubmit(event) {
-      event.preventDefault();
-      const teacherId = document.getElementById('teacher-select').value;
-      const message = document.getElementById('compliment-message').value;
-      const { error } = await supabase.from('compliments').insert([{ teacher_id: teacherId, message: message }]);
       if (error) {
-        alert('Failed: ' + error.message);
+        showStatus('SUPABASE ERROR: ' + error.message, true);
       } else {
-        alert('Submitted for moderation!');
-        document.getElementById('compliment-message').value = '';
+        showStatus('SUCCESS! Magic link sent. Check your inbox (and spam folder).', false);
       }
+    } catch (err) {
+      showStatus('NETWORK/JS ERROR: ' + err.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send Magic Login Link';
     }
+  }
 
-    async function loadModerationQueue() {
-      const { data: pending, error } = await supabase
-        .from('compliments')
-        .select('id, message, created_at, teachers(name, email)')
-        .eq('status', 'pending');
-      if (error) return;
+  async function handleLogout() {
+    await supabaseClient.auth.signOut();
+    window.location.reload();
+  }
 
-      const container = document.getElementById('moderation-list');
-      document.getElementById('pending-count').textContent = `${pending.length} Pending`;
-      if (pending.length === 0) {
-        container.innerHTML = '<p class="text-sm text-slate-400 italic">No pending compliments.</p>';
-        return;
-      }
-      container.innerHTML = pending.map(item => `
-        <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-2">
-          <span class="text-xs font-bold text-indigo-600 uppercase">To: ${item.teachers?.name || 'Teacher'}</span>
-          <p class="text-sm text-slate-700 italic">"${item.message}"</p>
-          <div class="flex gap-2 pt-2">
-            <button onclick="updateStatus('${item.id}', 'approved')" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded">Approve & Email</button>
-            <button onclick="updateStatus('${item.id}', 'rejected')" class="bg-red-100 text-red-600 text-xs px-3 py-1.5 rounded">Reject</button>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    async function updateStatus(id, newStatus) {
-      const { error } = await supabase.from('compliments').update({ status: newStatus }).eq('id', id);
-      if (error) alert(error.message);
-      else loadModerationQueue();
-    }
-
-    supabase.auth.onAuthStateChange((event, session) => {
-      const authSection = document.getElementById('auth-section');
-      const complimentSection = document.getElementById('compliment-section');
-      const moderationSection = document.getElementById('moderation-section');
-      const userDisplay = document.getElementById('user-email-display');
-      const logoutBtn = document.getElementById('logout-btn');
-
-      if (session) {
-        authSection.classList.add('hidden');
-        complimentSection.classList.remove('hidden');
-        moderationSection.classList.remove('hidden');
-        userDisplay.textContent = session.user.email;
-        logoutBtn.classList.remove('hidden');
-        loadTeachers();
-        loadModerationQueue();
-      } else {
-        authSection.classList.remove('hidden');
-        complimentSection.classList.add('hidden');
-        moderationSection.classList.add('hidden');
-        userDisplay.textContent = 'Not logged in';
-        logoutBtn.classList.add('hidden');
-      }
+  async function loadTeachers() {
+    const { data: teachers, error } = await supabaseClient.from('teachers').select('id, name').order('name');
+    if (error) return;
+    const selectEl = document.getElementById('teacher-select');
+    selectEl.innerHTML = '<option value="">-- Choose a teacher --</option>';
+    teachers.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      selectEl.appendChild(opt);
     });
-  </script>
+  }
+
+  async function handleComplimentSubmit(event) {
+    event.preventDefault();
+    const teacherId = document.getElementById('teacher-select').value;
+    const message = document.getElementById('compliment-message').value;
+    const { error } = await supabaseClient.from('compliments').insert([{ teacher_id: teacherId, message: message }]);
+    if (error) {
+      alert('Failed: ' + error.message);
+    } else {
+      alert('Submitted for moderation!');
+      document.getElementById('compliment-message').value = '';
+    }
+  }
+
+  async function loadModerationQueue() {
+    const { data: pending, error } = await supabaseClient
+      .from('compliments')
+      .select('id, message, created_at, teachers(name, email)')
+      .eq('status', 'pending');
+    if (error) return;
+
+    const container = document.getElementById('moderation-list');
+    document.getElementById('pending-count').textContent = `${pending.length} Pending`;
+    if (pending.length === 0) {
+      container.innerHTML = '<p class="text-sm text-slate-400 italic">No pending compliments.</p>';
+      return;
+    }
+    container.innerHTML = pending.map(item => `
+      <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-2">
+        <span class="text-xs font-bold text-indigo-600 uppercase">To: ${item.teachers?.name || 'Teacher'}</span>
+        <p class="text-sm text-slate-700 italic">"${item.message}"</p>
+        <div class="flex gap-2 pt-2">
+          <button onclick="updateStatus('${item.id}', 'approved')" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded">Approve & Email</button>
+          <button onclick="updateStatus('${item.id}', 'rejected')" class="bg-red-100 text-red-600 text-xs px-3 py-1.5 rounded">Reject</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function updateStatus(id, newStatus) {
+    const { error } = await supabaseClient.from('compliments').update({ status: newStatus }).eq('id', id);
+    if (error) alert(error.message);
+    else loadModerationQueue();
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    const authSection = document.getElementById('auth-section');
+    const complimentSection = document.getElementById('compliment-section');
+    const moderationSection = document.getElementById('moderation-section');
+    const userDisplay = document.getElementById('user-email-display');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    if (session) {
+      authSection.classList.add('hidden');
+      complimentSection.classList.remove('hidden');
+      moderationSection.classList.remove('hidden');
+      userDisplay.textContent = session.user.email;
+      logoutBtn.classList.remove('hidden');
+      loadTeachers();
+      loadModerationQueue();
+    } else {
+      authSection.classList.remove('hidden');
+      complimentSection.classList.add('hidden');
+      moderationSection.classList.add('hidden');
+      userDisplay.textContent = 'Not logged in';
+      logoutBtn.classList.add('hidden');
+    }
+  });
+</script>
 </body>
 </html>
