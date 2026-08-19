@@ -7,14 +7,14 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-<script type="text/javascript">
-   (function(){
-      // Sign up at emailjs.com (free) and paste your Public Key here
-      emailjs.init("YOUR_EMAILJS_PUBLIC_KEY");
-   })();
-</script>
-
+  <!-- EmailJS SDK Initialization -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script type="text/javascript">
+    (function(){
+       // Replace with your actual EmailJS Public Key
+       emailjs.init("YOUR_EMAILJS_PUBLIC_KEY");
+    })();
+  </script>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 font-sans p-4 md:p-8">
 
@@ -22,15 +22,11 @@
   <header class="max-w-3xl mx-auto flex justify-between items-center pb-6 mb-8 border-b border-slate-200">
     <div>
       <h1 class="text-xl font-bold text-slate-900">Moderation Dashboard</h1>
-      <!-- Display logged-in staff email -->
       <p class="text-xs text-slate-500" id="user-display">Verifying staff session...</p>
     </div>
     
     <div class="flex items-center gap-4">
-      <!-- Dynamic pending counter badge -->
       <span id="pending-count" class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-semibold">0 Pending</span>
-      
-      <!-- LOG OUT BUTTON -->
       <button onclick="handleLogout()" class="text-xs text-red-600 hover:underline font-medium">Log Out</button>
     </div>
   </header>
@@ -50,31 +46,26 @@
     const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // List of authorized moderator emails
+    // Synchronized moderator list
     const AUTHORIZED_MODERATORS = [
       'mihsterb@gmail.com',
-      '2013bermol@npghs.school.nz'
+      '2023bermol@npghs.school.nz',
+      'nbouterey@npghs.school.nz'
     ];
 
     // ==========================================
     // SECTION 2: AUTH & ROLE GUARD
     // ==========================================
-    /**
-     * Verifies user session and ensures only allowed moderators can access this dashboard.
-     */
     supabaseClient.auth.onAuthStateChange((event, session) => {
       if (!session) {
-        // Not logged in -> redirect to login screen
         window.location.href = 'index.html';
       } else {
-        const userEmail = session.user.email.toLowerCase();
+        const userEmail = session.user.email.toLowerCase().trim();
 
-        // Check if user is in moderator list
         if (!AUTHORIZED_MODERATORS.includes(userEmail)) {
           alert('Access denied: You do not have moderator privileges.');
           window.location.href = 'submit.html';
         } else {
-          // Display active email and fetch queue data
           document.getElementById('user-display').textContent = `Moderator: ${session.user.email}`;
           loadQueue();
         }
@@ -82,11 +73,8 @@
     });
 
     // ==========================================
-    // SECTION 3: READ OPERATION (FETCH QUEUE)
+    // SECTION 3: FETCH PENDING QUEUE
     // ==========================================
-    /**
-     * Performs a relational query to fetch pending compliments alongside teacher details.
-     */
     async function loadQueue() {
       const { data: pending, error } = await supabaseClient
         .from('compliments')
@@ -107,118 +95,91 @@
         return;
       }
 
-      container.innerHTML = pending.map(item => `
-        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-          <div class="flex justify-between items-center text-xs">
-            <span class="font-bold text-indigo-600 uppercase tracking-wide">To: ${item.teachers?.name || 'Teacher'}</span>
-            <span class="text-slate-400">${new Date(item.created_at).toLocaleDateString()}</span>
+      container.innerHTML = pending.map(item => {
+        const teacherName = item.teachers?.name || 'Teacher';
+        const teacherEmail = item.teachers?.email || '';
+        // Escape quotes to prevent JavaScript string breaking inside onclick
+        const safeMessage = item.message.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+        return `
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+            <div class="flex justify-between items-center text-xs">
+              <span class="font-bold text-indigo-600 uppercase tracking-wide">To: ${teacherName} (${teacherEmail})</span>
+              <span class="text-slate-400">${new Date(item.created_at).toLocaleDateString()}</span>
+            </div>
+            
+            <p class="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-100">"${item.message}"</p>
+            
+            <div class="flex gap-2 pt-1">
+              <button onclick="approveAndSend('${item.id}', '${teacherEmail}', '${teacherName}', '${safeMessage}')" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-700 font-medium transition">
+                Approve & Send
+              </button>
+              <button onclick="rejectKudos('${item.id}')" class="bg-red-50 text-red-600 text-xs px-3 py-1.5 rounded-lg hover:bg-red-100 font-medium transition">
+                Reject
+              </button>
+            </div>
           </div>
-          
-          <p class="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-100">"${item.message}"</p>
-          
-          <div class="flex gap-2 pt-1">
-            <button onclick="setStatus('${item.id}', 'approved')" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-700 font-medium transition">
-              Approve & Send
-            </button>
-            <button onclick="setStatus('${item.id}', 'rejected')" class="bg-red-50 text-red-600 text-xs px-3 py-1.5 rounded-lg hover:bg-red-100 font-medium transition">
-              Reject
-            </button>
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     // ==========================================
-    // SECTION 4: UPDATE OPERATION (MODERATION ACTION)
+    // SECTION 4: APPROVE AND EMAIL ACTION
     // ==========================================
-    /**
-     * Updates status in database to 'approved' or 'rejected'.
-     */
-    async function setStatus(id, statusChoice) {
+    async function approveAndSend(complimentId, teacherEmail, teacherName, messageText) {
+      try {
+        // A. Update Supabase Database
+        const { error: dbError } = await supabaseClient
+          .from('compliments')
+          .update({ status: 'approved' })
+          .eq('id', complimentId);
+
+        if (dbError) throw dbError;
+
+        // B. Send Email via EmailJS (if parameters configured)
+        if (teacherEmail && teacherEmail.includes('@')) {
+          const templateParams = {
+            to_email: teacherEmail,
+            teacher_name: teacherName,
+            kudos_message: messageText
+          };
+
+          // Change SERVICE_ID and TEMPLATE_ID to match your EmailJS dashboard setup
+          await emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', templateParams);
+        }
+
+        alert(`Approved and sent to ${teacherName}!`);
+        loadQueue(); // Refresh list
+
+      } catch (err) {
+        console.error('Error approving kudos:', err);
+        alert('Failed to process approval: ' + err.message);
+      }
+    }
+
+    // ==========================================
+    // SECTION 5: REJECT ACTION
+    // ==========================================
+    async function rejectKudos(id) {
       const { error } = await supabaseClient
         .from('compliments')
-        .update({ status: statusChoice })
+        .update({ status: 'rejected' })
         .eq('id', id);
 
       if (error) {
         alert('Database update failed: ' + error.message);
       } else {
-        loadQueue(); // Re-render queue dynamically
+        loadQueue();
       }
     }
 
     // ==========================================
-    // SECTION 5: LOGOUT HANDLER
+    // SECTION 6: LOGOUT HANDLER
     // ==========================================
-    /**
-     * Revokes auth tokens and sends user back to login screen.
-     */
     async function handleLogout() {
       await supabaseClient.auth.signOut();
       window.location.href = 'index.html';
     }
-
-
-async function approveAndSend(complimentId, teacherEmail, teacherName, messageText) {
-  try {
-    // A. UPDATE DATABASE STATUS
-    const { error: dbError } = await supabaseClient
-      .from('compliments')
-      .update({ status: 'approved' })
-      .eq('id', complimentId);
-
-    if (dbError) throw dbError;
-
-    // B. SEND EMAIL DIRECTLY VIA EMAILJS (or your preferred client mailer)
-    const templateParams = {
-      to_email: teacherEmail,
-      teacher_name: teacherName,
-      kudos_message: messageText
-    };
-
-    await emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', templateParams);
-
-    alert(`Kudos approved and sent to ${teacherName} (${teacherEmail})!`);
-    
-    // C. REFRESH DASHBOARD UI
-    loadPendingCompliments();
-
-  } catch (err) {
-    console.error('Error approving kudos:', err);
-    alert('Failed to approve or send email: ' + err.message);
-  }
-}
-
-async function loadPendingCompliments() {
-  const { data: compliments, error } = await supabaseClient
-    .from('compliments')
-    .select(`
-      id,
-      message,
-      created_at,
-      teachers (
-        name,
-        email
-      )
-    `)
-    .eq('status', 'pending');
-
-  if (error) {
-    console.error("Error loading pending compliments:", error);
-    return;
-  }
-
-  const container = document.getElementById('kudos-list');
-  container.innerHTML = compliments.map(c => `
-    <div class="card">
-      <p><strong>TO: ${c.teachers.name}</strong> (${c.teachers.email})</p>
-      <p>"${c.message}"</p>
-      <button onclick="approveAndSend('${c.id}', '${c.teachers.email}', '${c.teachers.name}', '${c.message}')" class="bg-emerald-600 text-white px-3 py-1 rounded">
-        Approve & Send
-      </button>
-    </div>
-  `).join('');
-}
   </script>
 </body>
 </html>
