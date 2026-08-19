@@ -2,40 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!-- Ensure proper scaling on mobile devices -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Student Login - Kudos Portal</title>
   
-  <!-- 1. Include Tailwind CSS for rapid styling -->
   <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- 2. Include Supabase JavaScript SDK library -->
-  <!-- This script creates a global 'supabase' object in the browser context -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 text-slate-800">
 
-  <!-- MAIN CONTAINER: Centered card layout -->
   <main class="max-w-md w-full bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-    
-    <!-- PAGE HEADER -->
     <div class="text-center mb-6">
       <h1 class="text-2xl font-bold text-slate-900">Kudos Portal</h1>
-      <p class="text-sm text-slate-500 mt-1">Sign in with your school email to send a compliment</p>
+      <p class="text-sm text-slate-500 mt-1">Sign in with your email to access the portal</p>
     </div>
 
-    <!-- STUDENT LOGIN FORM -->
-    <!-- The 'onsubmit' event catches the form submission and passes it to our JavaScript handler -->
+    <!-- LOGIN FORM -->
     <form onsubmit="handleLogin(event)" class="space-y-4">
       <div>
         <label for="student-email" class="block text-xs font-semibold text-slate-600 uppercase mb-1">
-          School Email
+          School or Moderator Email
         </label>
         <input 
           type="email" 
           id="student-email" 
           required 
-          placeholder="student@school.ac.nz" 
+          placeholder="user@school.ac.nz" 
           class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
@@ -49,7 +40,6 @@
       </button>
     </form>
 
-    <!-- DYNAMIC STATUS BANNER: Hidden by default, populated by JavaScript upon errors or success -->
     <div id="status-message" class="mt-4 p-3 rounded-lg text-xs font-mono hidden"></div>
   </main>
 
@@ -57,132 +47,81 @@
     // ==========================================
     // SECTION 1: SUPABASE INITIALIZATION
     // ==========================================
-    // API Credentials for connecting our frontend to the Supabase backend project
     const SUPABASE_URL = 'https://eaulqdtjrqmnjgjgbzsp.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_WlWXdjjsWG96tB4_jTEkZw_v50g9k9g';
-
-    // CRITICAL LESSON FOR STUDENTS:
-    // We name our connection instance 'supabaseClient' (NOT 'supabase').
-    // Naming it 'supabase' causes a variable collision with the global SDK library loaded in the <head>.
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ==========================================
     // SECTION 2: UI FEEDBACK HELPER
     // ==========================================
-    /**
-     * Updates and displays the alert box on screen.
-     * @param {string} msg - The text to display.
-     * @param {boolean} isError - Controls whether the message is styled Red (Error) or Green (Success).
-     */
     function showStatus(msg, isError = false) {
       const el = document.getElementById('status-message');
-      
-      // Clear existing color classes
       el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
-      
-      // Apply correct alert styling based on 'isError' boolean
       el.classList.add(isError ? 'bg-red-100' : 'bg-green-100', isError ? 'text-red-700' : 'text-green-700');
-      
-      // Set the message text
       el.textContent = msg;
     }
 
     // ==========================================
     // SECTION 3: LOGIN FORM HANDLER
     // ==========================================
-    /**
-     * Triggered when the student clicks 'Send Magic Login Link'.
-     */
     async function handleLogin(event) {
-      // Prevent standard browser form submission (which reloads the whole web page)
       event.preventDefault();
 
       const btn = document.getElementById('submit-btn');
-      const emailInput = document.getElementById('student-email').value;
+      const emailInput = document.getElementById('student-email').value.trim();
 
-      // Provide immediate UX feedback and disable the button to prevent duplicate clicks
       btn.disabled = true;
       btn.textContent = 'Sending link...';
 
       try {
-        // Request a Magic Link OTP email from Supabase Auth
         const { error } = await supabaseClient.auth.signInWithOtp({
           email: emailInput,
           options: {
-            // REDIRECT TARGET: Once the student clicks the link in their email, 
-            // Supabase sends them directly to the compliment submission page!
-            emailRedirectTo: 'https://misterrgb.github.io/kudos/submit.html'
+            // REDIRECT TARGET: Must point back to index.html so the router below inspects the role!
+            emailRedirectTo: 'https://misterrgb.github.io/kudos/index.html'
           }
         });
 
         if (error) {
-          // Display API error message (e.g., rate limits, bad domain)
           showStatus('Error: ' + error.message, true);
         } else {
-          // Display success instructions
           showStatus('Success! Check your email inbox for your magic login link.', false);
         }
       } catch (err) {
-        // Catch unexpected network crashes or client-side errors
         showStatus('Unexpected Error: ' + err.message, true);
       } finally {
-        // Restore button state after request finishes
         btn.disabled = false;
         btn.textContent = 'Send Magic Login Link';
       }
     }
 
-// ==========================================
-// SECTION 4: SMART AUTHENTICATION GUARD & ROUTER
-// ==========================================
-const AUTHORIZED_MODERATORS = [
-  'mihsterb@gmail.com',
-  '2023bermol@npghs.school.nz',
-  'nbouterey@npghs.school.nz'
-];
+    // ==========================================
+    // SECTION 4: SMART AUTHENTICATION GUARD & ROUTER
+    // ==========================================
+    const AUTHORIZED_MODERATORS = [
+      'mihsterb@gmail.com',
+      '2023bermol@npghs.school.nz',
+      'nbouterey@npghs.school.nz'
+    ];
 
-/**
- * Handles all routing automatically.
- * Supabase triggers this on page load AND after magic link tokens are parsed.
- */
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (session && session.user) {
-    const userEmail = session.user.email.toLowerCase().trim();
-    console.log("Authenticated User:", userEmail);
+    /**
+     * Handles all routing automatically.
+     * Supabase triggers this on page load AND after magic link tokens are parsed.
+     */
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (session && session.user) {
+        const userEmail = session.user.email.toLowerCase().trim();
+        console.log("Authenticated User:", userEmail);
 
-    if (AUTHORIZED_MODERATORS.includes(userEmail)) {
-      console.log("Access granted: Redirecting to moderate.html");
-      window.location.href = 'moderate.html';
-    } else {
-      console.log("Standard access: Redirecting to submit.html");
-      window.location.href = 'submit.html';
-    }
-  }
-});
-
-// Magic Link Trigger Function
-async function handleMagicLink() {
-  const emailInput = document.getElementById('email-input').value.trim();
-  
-  if (!emailInput) {
-    alert('Please enter your email address.');
-    return;
-  }
-
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email: emailInput,
-    options: {
-      // CRITICAL: Must point back to index.html so the router above can inspect the email!
-      emailRedirectTo: 'https://misterrgb.github.io/kudos/index.html'
-    }
-  });
-
-  if (error) {
-    alert('Error sending link: ' + error.message);
-  } else {
-    alert('Magic Link sent! Check your inbox.');
-  }
-}
+        if (AUTHORIZED_MODERATORS.includes(userEmail)) {
+          console.log("Access granted: Redirecting to moderate.html");
+          window.location.href = 'moderate.html';
+        } else {
+          console.log("Standard access: Redirecting to submit.html");
+          window.location.href = 'submit.html';
+        }
+      }
+    });
   </script>
 </body>
 </html>
